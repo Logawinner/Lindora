@@ -22,6 +22,14 @@ yay -S lindora
 ```
 paru -S lindora
 ```
+# Debian-Based 
+
+```
+echo "deb https://Logawinner.github.io/lindora-apt stable main" | sudo tee /etc/apt/sources.list.d/lindora.list
+
+sudo apt update
+sudo apt install lindora
+```
 
 # Other
 

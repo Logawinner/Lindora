@@ -1,0 +1,12 @@
+Package: lindora-dbgsym
+Source: lindora
+Version: 1.1-1
+Auto-Built-Package: debug-symbols
+Architecture: amd64
+Maintainer: Logawinner <logawinner@example.com>
+Installed-Size: 427
+Depends: lindora (= 1.1-1)
+Section: debug
+Priority: optional
+Description: debug symbols for lindora
+Build-Ids: 9d39d4389dd8797de6e5b2fdcddc31a265542c68

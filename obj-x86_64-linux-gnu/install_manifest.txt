@@ -1,0 +1,3 @@
+/usr/bin/lindora
+/usr/share/applications/lindora-native.desktop
+/usr/share/icons/hicolor/scalable/apps/Lindora.svg

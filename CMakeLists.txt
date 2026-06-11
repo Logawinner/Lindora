@@ -17,6 +17,8 @@ find_package(Qt6 REQUIRED COMPONENTS
 # Define your executable
 add_executable(lindora-native main.cpp)
 
+set_target_properties(lindora-native PROPERTIES OUTPUT_NAME lindora)
+
 # Link the Qt libraries (Added Qt6::Svg)
 target_link_libraries(lindora-native PRIVATE 
     Qt6::Core 

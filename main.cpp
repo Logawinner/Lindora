@@ -61,8 +61,8 @@ int main(int argc, char *argv[]) {
     profile->setPersistentStoragePath(profile->persistentStoragePath());
     profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
 
-    // Set dark mode configuration directly on the profile settings to invert standard text
-    profile->settings()->setAttribute(QWebEngineSettings::ForceDarkMode, true);
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+        "--force-dark-mode --enable-features=WebUIDarkMode");
 
 QString customCss = 
     /* 1. Universal "Catch-All": Deep Blue background (#001a33) */

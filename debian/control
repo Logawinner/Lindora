@@ -1,0 +1,29 @@
+Source: lindora
+Section: sound
+Priority: optional
+Maintainer: Logawinner <logawinner@example.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ qt6-base-dev,
+ qt6-svg-dev,
+ qt6-webengine-dev,
+ libxkbcommon-dev,
+ libxcb1-dev,
+ libxcb-xkb-dev,
+ libxcb-render0-dev,
+ libxcb-shape0-dev,
+ libxcb-shm0-dev,
+ libxcb-icccm4-dev,
+ libxcb-image0-dev,
+ libxcb-keysyms1-dev,
+ libxcb-randr0-dev,
+ pkg-config
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: lindora
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Qt6 WebEngine Pandora client
+ Lindora is a Qt6 WebEngine desktop client with tray controls and MPRIS support.

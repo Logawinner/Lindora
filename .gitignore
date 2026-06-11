@@ -1,3 +1,4 @@
 lindora-native
 *.o
 *.a
+build/

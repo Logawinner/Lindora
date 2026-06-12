@@ -64,6 +64,7 @@ sudo make install
 * Please use clean code
 * Please document your changes
 * Test your code before making a PR
+* If your PR breaks the code on repo it will get rejected
 
 # Issues
 

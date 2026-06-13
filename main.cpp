@@ -808,20 +808,28 @@ QObject::connect(shuffleAction, &QAction::triggered, [browser]() {
     browser->page()->runJavaScript(shuffleJs);
 });
 
-// Optional: Keep the visibility synced if you want it to appear only when available
 QObject::connect(trayMenu, &QMenu::aboutToShow, [browser, shuffleAction]() {
     QString checkJs =
-    "(function() {"
-    "  const candidates = Array.from(document.querySelectorAll('button, div[role=\"button\"], span[role=\"button\"]'));"
-    "  const btn = candidates.find(el => {"
-    "    const a = (el.getAttribute('aria-label') || '').toLowerCase();"
-    "    return a.includes('shuffle');"
-    "  });"
-    "  return !!(btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true');"
-    "})();";
+        "(function() {"
+        "  const btn = document.querySelector('[data-qa=\"tuner_shuffle_button\"]');"
+        "  if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') {"
+        "    return null;"
+        "  }"
+        "  return btn.getAttribute('aria-checked') === 'true';"
+        "})();";
 
     browser->page()->runJavaScript(checkJs, [shuffleAction](const QVariant &res) {
-        shuffleAction->setVisible(res.toBool());
+        if (res.isNull()) {
+            shuffleAction->setVisible(false);
+            return;
+        }
+
+        bool enabled = res.toBool();
+
+        shuffleAction->setVisible(true);
+        shuffleAction->setText(
+            enabled ? "Shuffle: On" : "Shuffle: Off"
+        );
     });
 });
 

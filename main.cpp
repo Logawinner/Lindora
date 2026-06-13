@@ -80,7 +80,7 @@ QString customCss =
     /* 4. Buttons: Inherit background from their parent panel */
     "button, [role='button'] { "
     "  background-color: inherit !important; " 
-    "  border: 1px solid #5c1b4b !important; " /* Subtle border for visibility */
+    "  border: 1px solid #700052 !important; " /* Subtle border for visibility */
     "  color: var(--text-color) !important; "
     "} "
 
@@ -691,7 +691,7 @@ QObject::connect(trayMenu, &QMenu::aboutToShow,
     QString checkJs =
     "(function() {"
     "  const btn = document.querySelector('[data-qa=\"thumbs_up_button\"]');"
-    "  if (!btn) return 'UNKNOWN';"
+    "  if (!btn) return 'MISSING';"
     ""
     "  return btn.getAttribute('aria-checked') === 'true'"
     "      ? 'ON'"
@@ -704,12 +704,17 @@ QObject::connect(trayMenu, &QMenu::aboutToShow,
 
             QString state = res.toString();
 
+            if (state == "MISSING") {
+                thumbUpAction->setVisible(false);
+                return;
+            }
+
+            thumbUpAction->setVisible(true);
+
             if (state == "ON")
                 thumbUpAction->setText("Thumbs Up: On");
-            else if (state == "OFF")
-                thumbUpAction->setText("Thumbs Up: Off");
             else
-                thumbUpAction->setText("Thumbs Up");
+                thumbUpAction->setText("Thumbs Up: Off");
         });
 });
 

@@ -4,6 +4,7 @@ project(Lindora VERSION 1.2 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_INSTALL_PREFIX /usr)
 
 find_package(Qt6 REQUIRED COMPONENTS
     Core Widgets WebEngineWidgets Svg DBus

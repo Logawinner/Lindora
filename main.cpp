@@ -116,7 +116,7 @@ public:
 
     bool CanQuit() const { return false; }
     bool CanRaise() const { return true; }
-    QString Identity() const { return "Pandora Native"; }
+    QString Identity() const { return "Lindora"; }
 
     bool HasTrackList() const
     {
@@ -125,7 +125,7 @@ public:
 
     QString DesktopEntry() const
     {
-        return "pandora-native";
+        return "Lindora";
     }
 
 public slots:

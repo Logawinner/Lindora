@@ -1,3 +1,4 @@
+#include <QSocketNotifier>
 #include <QApplication>
 #include <QMainWindow>
 #include <QWebEngineView>
@@ -19,9 +20,14 @@
 #include <QPixmap>
 #include <QPainter>
 #include <QProcess>
-#include <QtDBus/QDBusAbstractAdaptor>
-#include <QtDBus/QDBusConnection>
 #include <QDateTime>
+#include <QObject>
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusMessage>
+#include <QDBusAbstractAdaptor>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusVariant>
 
 // Custom window class to intercept close events and hide to tray natively
 class LindoraWindow : public QMainWindow {
@@ -34,8 +40,383 @@ protected:
     }
 };
 
+class MprisPlayer;
+
+class MprisAdaptor : public QDBusAbstractAdaptor
+{
+    Q_OBJECT
+
+    Q_CLASSINFO("D-Bus Interface", "org.mpris.MediaPlayer2.Player")
+
+public:
+    explicit MprisAdaptor(MprisPlayer *parent);
+
+public slots:
+    void Play();
+    void Pause();
+    void PlayPause();
+    void Next();
+    void Previous();
+
+public:
+    Q_PROPERTY(QString PlaybackStatus READ PlaybackStatus)
+    Q_PROPERTY(QVariantMap Metadata READ Metadata)
+    Q_PROPERTY(qlonglong Position READ Position)
+    Q_PROPERTY(bool CanPlay READ CanPlay)
+    Q_PROPERTY(bool CanPause READ CanPause)
+    Q_PROPERTY(bool CanGoNext READ CanGoNext)
+    Q_PROPERTY(bool CanGoPrevious READ CanGoPrevious)
+    Q_PROPERTY(bool CanSeek READ CanSeek)
+    Q_PROPERTY(bool CanControl READ CanControl)
+
+    Q_PROPERTY(double Rate READ Rate)
+    Q_PROPERTY(double MinimumRate READ MinimumRate)
+    Q_PROPERTY(double MaximumRate READ MaximumRate)
+
+    Q_PROPERTY(double Volume READ Volume)
+
+bool CanPlay() const;
+bool CanPause() const;
+bool CanGoNext() const;
+bool CanGoPrevious() const;
+bool CanSeek() const;
+bool CanControl() const;
+
+double Rate() const;
+double MinimumRate() const;
+double MaximumRate() const;
+
+double Volume() const;
+    QString PlaybackStatus() const;
+    QVariantMap Metadata() const;
+    qlonglong Position() const;
+
+private:
+    MprisPlayer *m_player;
+};
+
+class MprisRootAdaptor : public QDBusAbstractAdaptor
+{
+    Q_OBJECT
+
+    Q_CLASSINFO("D-Bus Interface", "org.mpris.MediaPlayer2")
+
+public:
+    explicit MprisRootAdaptor(QObject *parent)
+        : QDBusAbstractAdaptor(parent)
+    {
+    }
+
+    Q_PROPERTY(bool CanQuit READ CanQuit)
+    Q_PROPERTY(bool CanRaise READ CanRaise)
+    Q_PROPERTY(QString Identity READ Identity)
+
+    Q_PROPERTY(bool HasTrackList READ HasTrackList)
+    Q_PROPERTY(QString DesktopEntry READ DesktopEntry)
+
+    bool CanQuit() const { return false; }
+    bool CanRaise() const { return true; }
+    QString Identity() const { return "Pandora Native"; }
+
+    bool HasTrackList() const
+    {
+        return false;
+    }
+
+    QString DesktopEntry() const
+    {
+        return "pandora-native";
+    }
+
+public slots:
+    void Raise() {}
+};
+
+class MprisPlayer : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit MprisPlayer(QWebEngineView *view)
+        : m_view(view)
+    {
+        new MprisAdaptor(this);
+        new MprisRootAdaptor(this);
+
+        QDBusConnection::sessionBus().registerService(
+            "org.mpris.MediaPlayer2.pandora");
+
+        QDBusConnection::sessionBus().registerObject(
+            "/org/mpris/MediaPlayer2",
+            this,
+            QDBusConnection::ExportAdaptors);
+
+        auto *timer = new QTimer(this);
+
+        connect(timer, &QTimer::timeout,
+                this, &MprisPlayer::updateMetadata);
+
+        timer->start(1000);
+    }
+
+    QString title() const { return m_title; }
+    QString artist() const { return m_artist; }
+    bool playing() const { return m_playing; }
+    qlonglong position() const { return m_position; }
+
+    void runJS(const QString &js)
+    {
+        m_view->page()->runJavaScript(js);
+    }
+
+public slots:
+    void updateMetadata()
+    {
+        QString js = R"(
+(() => {
+    return {
+        title:
+            document.querySelector(
+                '[data-qa="mini_track_title"]'
+            )?.textContent?.trim() || "",
+
+        artist:
+            document.querySelector(
+                '[data-qa="mini_track_artist_name"]'
+            )?.textContent?.trim() || "",
+
+        elapsed:
+            document.querySelector(
+                '[data-qa="elapsed_time"]'
+            )?.textContent?.trim() || "",
+
+        playing:
+            document.querySelector(
+                '[data-qa="pause_button"]'
+            ) !== null
+    };
+})();
+)";
+
+        m_view->page()->runJavaScript(
+            js,
+            [this](const QVariant &v)
+            {
+                QVariantMap map = v.toMap();
+
+                QString newTitle =
+                    map["title"].toString();
+
+                QString newArtist =
+                    map["artist"].toString();
+
+                bool newPlaying =
+                    map["playing"].toBool();
+
+                QString elapsed =
+                    map["elapsed"].toString();
+
+                QStringList parts =
+                    elapsed.split(":");
+
+                qlonglong pos = 0;
+
+                if (parts.size() == 2)
+                {
+                    pos =
+                        (parts[0].toLongLong() * 60 +
+                         parts[1].toLongLong())
+                        * 1000000;
+                }
+
+                bool changed =
+                    newTitle != m_title ||
+                    newArtist != m_artist ||
+                    newPlaying != m_playing;
+                    pos != m_position;
+
+                m_title = newTitle;
+                m_artist = newArtist;
+                m_playing = newPlaying;
+                m_position = pos;
+
+                if (changed)
+                    emitPropertiesChanged();
+            });
+    }
+
+    void emitPropertiesChanged()
+    {
+        QVariantMap changed;
+
+        changed["PlaybackStatus"] =
+            m_playing ? "Playing" : "Paused";
+
+        QVariantMap metadata;
+
+        metadata["xesam:title"] =
+            m_title;
+
+        metadata["xesam:artist"] =
+            QStringList{m_artist};
+
+        changed["Metadata"] =
+            QVariant::fromValue(metadata);
+
+        changed["Position"] = m_position;
+
+        QDBusMessage signal =
+            QDBusMessage::createSignal(
+                "/org/mpris/MediaPlayer2",
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged");
+
+        signal << "org.mpris.MediaPlayer2.Player"
+               << changed
+               << QStringList();
+
+        QDBusConnection::sessionBus().send(signal);
+    }
+
+private:
+    QWebEngineView *m_view;
+
+    QString m_title;
+    QString m_artist;
+
+    bool m_playing = false;
+
+    qlonglong m_position = 0;
+};
+
+MprisAdaptor::MprisAdaptor(MprisPlayer *parent)
+    : QDBusAbstractAdaptor(parent),
+      m_player(parent)
+{
+}
+
+QString MprisAdaptor::PlaybackStatus() const
+{
+    return m_player->playing()
+               ? "Playing"
+               : "Paused";
+}
+
+qlonglong MprisAdaptor::Position() const
+{
+    return m_player->position();
+}
+
+QVariantMap MprisAdaptor::Metadata() const
+{
+    QVariantMap metadata;
+
+    metadata["xesam:title"] =
+        m_player->title();
+
+    metadata["xesam:artist"] =
+        QStringList{m_player->artist()};
+
+    return metadata;
+}
+
+bool MprisAdaptor::CanPlay() const
+{
+    return true;
+}
+
+bool MprisAdaptor::CanPause() const
+{
+    return true;
+}
+
+bool MprisAdaptor::CanGoNext() const
+{
+    return true;
+}
+
+bool MprisAdaptor::CanGoPrevious() const
+{
+    return true;
+}
+
+bool MprisAdaptor::CanSeek() const
+{
+    return false;
+}
+
+bool MprisAdaptor::CanControl() const
+{
+    return true;
+}
+
+double MprisAdaptor::Rate() const
+{
+    return 1.0;
+}
+
+double MprisAdaptor::MinimumRate() const
+{
+    return 1.0;
+}
+
+double MprisAdaptor::MaximumRate() const
+{
+    return 1.0;
+}
+
+double MprisAdaptor::Volume() const
+{
+    return 1.0;
+}
+
+void MprisAdaptor::Play()
+{
+    m_player->runJS(
+        "document.querySelector('[data-qa=\"play_button\"]')?.click();");
+}
+
+void MprisAdaptor::Pause()
+{
+    m_player->runJS(
+        "document.querySelector('[data-qa=\"pause_button\"]')?.click();");
+}
+
+void MprisAdaptor::PlayPause()
+{
+    m_player->runJS(R"(
+const pauseBtn =
+    document.querySelector(
+        '[data-qa="pause_button"]');
+
+const playBtn =
+    document.querySelector(
+        '[data-qa="play_button"]');
+
+if (pauseBtn)
+    pauseBtn.click();
+else if (playBtn)
+    playBtn.click();
+)");
+}
+
+void MprisAdaptor::Next()
+{
+    m_player->runJS(
+        "document.querySelector('[data-qa=\"skip_button\"]')?.click();");
+}
+
+void MprisAdaptor::Previous()
+{
+    m_player->runJS(
+        "document.querySelector('[data-qa=\"t3_skip_back_button\"]')?.click();");
+}
+
 int main(int argc, char *argv[]) {
     qputenv("QTWEBENGINE_REMOTE_DEBUGGING", "9222");
+    qputenv("QTWEBENGINE_DISABLE_MEDIA_SESSION_API", "1");
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
+        "--disable-features=MediaSessionService");
     
 
     QApplication app(argc, argv);
@@ -61,8 +442,10 @@ int main(int argc, char *argv[]) {
     profile->setPersistentStoragePath(profile->persistentStoragePath());
     profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
 
-    qputenv("QTWEBENGINE_CHROMIUM_FLAGS",
-        "--force-dark-mode --enable-features=WebUIDarkMode");
+    qputenv(
+    "QTWEBENGINE_CHROMIUM_FLAGS",
+    "--force-dark-mode --enable-features=WebUIDarkMode"
+);
 
 QString customCss = 
     /* 1. Universal "Catch-All": Deep Blue background (#001a33) */
@@ -80,14 +463,14 @@ QString customCss =
     /* 4. Buttons: Inherit background from their parent panel */
     "button, [role='button'] { "
     "  background-color: inherit !important; " 
-    "  border: 1px solid #700052 !important; " /* Subtle border for visibility */
+    "  border: 1px solid #e100ff !important; " /* Subtle border for visibility */
     "  color: var(--text-color) !important; "
     "} "
 
     /* 5. Cleanup & Text */
     "h1, h2, h3, p, span, div, a { color: var(--text-color) !important; } "
     "::-webkit-scrollbar { width: 8px !important; } "
-    "::-webkit-scrollbar-thumb { background: #5c1b4b !important; } "
+    "::-webkit-scrollbar-thumb { background: #e100ff !important; } "
     "::-webkit-scrollbar-track { background: #001a33 !important; }";
 
     QString jsCode = QString(
@@ -833,22 +1216,12 @@ QObject::connect(trayMenu, &QMenu::aboutToShow, [browser, shuffleAction]() {
     });
 });
 
-// --- MPRIS INTEGRATION (NO MOC REQUIRED) ---
-QDBusConnection mprisConn = QDBusConnection::sessionBus();
-if (mprisConn.registerService("org.mpris.MediaPlayer2.lindora")) {
-    QObject *mprisObj = new QObject(&window);
-    mprisConn.registerObject("/org/mpris/MediaPlayer2", mprisObj, QDBusConnection::ExportAdaptors);
+auto *mpris =
+    new MprisPlayer(browser);
 
-    // Create a local bridge to call your existing actions
-    QObject *bridge = new QObject(&window);
-    
-    // Connect D-Bus signals directly to existing actions
-    // This assumes your QActions have slots named "trigger()" (which they do)
-    mprisConn.connect("org.mpris.MediaPlayer2", "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlayPause", pauseAction, SLOT(trigger()));
-    mprisConn.connect("org.mpris.MediaPlayer2", "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Next", skipAction, SLOT(trigger()));
-    mprisConn.connect("org.mpris.MediaPlayer2", "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Previous", prevAction, SLOT(trigger()));
-}
+Q_UNUSED(mpris);
 
     window.show();
     return app.exec();
 }
+#include "main.moc"

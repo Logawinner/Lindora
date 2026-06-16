@@ -144,7 +144,7 @@ public:
         new MprisRootAdaptor(this);
 
         QDBusConnection::sessionBus().registerService(
-            "org.mpris.MediaPlayer2.pandora");
+            "org.mpris.MediaPlayer2.lindora");
 
         QDBusConnection::sessionBus().registerObject(
             "/org/mpris/MediaPlayer2",

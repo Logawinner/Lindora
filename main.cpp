@@ -144,7 +144,7 @@ public:
         new MprisRootAdaptor(this);
 
         QDBusConnection::sessionBus().registerService(
-            "org.mpris.MediaPlayer2.lindora");
+            "org.mpris.MediaPlayer2.pandora");
 
         QDBusConnection::sessionBus().registerObject(
             "/org/mpris/MediaPlayer2",
@@ -442,59 +442,174 @@ int main(int argc, char *argv[]) {
     profile->setPersistentStoragePath(profile->persistentStoragePath());
     profile->setPersistentCookiesPolicy(QWebEngineProfile::ForcePersistentCookies);
 
-    qputenv(
-    "QTWEBENGINE_CHROMIUM_FLAGS",
-    "--force-dark-mode --enable-features=WebUIDarkMode"
-);
 
-QString customCss = 
-    /* 1. Universal "Catch-All": Deep Blue background (#001a33) */
-    "*:not(img):not([class*='art']):not([class*='Art']):not([class*='thumb']):not([class*='Thumb']):not(.Image__img) { "
-    "  background-color: #001224 !important; "
-    "  background-image: none !important; "
-    "} "
+QPalette p = qApp->palette();
 
-    /* 2. UI Layer: Deep Purple panels (#1f0022) */
-    ":root { --panel-purple: #1f0022; --text-color: #ffffff; } "
-    ".nowPlayingTopInfo, .sidebar, .root-container { "
-    "  background-color: var(--panel-purple) !important; "
-    "} "
+/* Qt native system colors */
+QString bg = p.color(QPalette::Window).name();
+QString panel = p.color(QPalette::Base).name();
+QString text = p.color(QPalette::WindowText).name();
+QString accent = p.color(QPalette::Highlight).name();
 
-    /* 4. Buttons: Inherit background from their parent panel */
-    "button, [role='button'] { "
-    "  background-color: inherit !important; " 
-    "  border: 1px solid #e100ff !important; " /* Subtle border for visibility */
-    "  color: var(--text-color) !important; "
-    "} "
+QString customCss =
+    /* 1. Universal "Catch-All": Qt system background */
+    QString("*:not(img):not(svg):not(canvas):not(video):not([class*='art']):not([class*='Art']):not([class*='thumb']):not([class*='Thumb']):not(.Image__img) { "
+            "background-color: %1 !important; "
+            "background-image: none !important; "
+            "} ")
+    .arg(bg)
 
-    /* 5. Cleanup & Text */
-    "h1, h2, h3, p, span, div, a { color: var(--text-color) !important; } "
-    "::-webkit-scrollbar { width: 8px !important; } "
-    "::-webkit-scrollbar-thumb { background: #e100ff !important; } "
-    "::-webkit-scrollbar-track { background: #001a33 !important; }";
+    /* 2. Root variables */
+    + QString(":root { "
+              "--panel-purple: %1; "
+              "--text-color: %2; "
+              "--accent-color: %3; "
+              "} ")
+    .arg(panel)
+    .arg(text)
+    .arg(accent)
 
-    QString jsCode = QString(
-        "(function() {"
-        "  var style = document.createElement('style');"
-        "  style.type = 'text/css';"
-        "  style.appendChild(document.createTextNode(`%1`));"
-        "  document.head.appendChild(style);"
-        "  var observer = new MutationObserver(function(mutations) {"
-        "    if (!document.head.contains(style)) {"
-        "      document.head.appendChild(style);"
-        "    }"
-        "  });"
-        "  observer.observe(document.documentElement, {childList: true, subtree: true});"
-        "})();"
-    ).arg(customCss);
+    /* 3. Main UI layers */
+    + ".nowPlayingTopInfo, .sidebar, .root-container { "
+      "background-color: var(--panel-purple) !important; "
+      "} "
 
-    QWebEngineScript script;
-    script.setName("PlumCanvasTheme");
-    script.setSourceCode(jsCode);
-    script.setInjectionPoint(QWebEngineScript::DocumentReady);
-    script.setRunsOnSubFrames(true);
+    /* 4. Buttons */
+    + "button, [role='button'] { "
+      "background-color: inherit !important; "
+      "border: 1px solid var(--accent-color) !important; "
+      "color: var(--text-color) !important; "
+      "} "
 
-    profile->scripts()->insert(script);
+    /* 5. Text */
+    + "h1, h2, h3, p, span, div, a { "
+      "color: var(--text-color) !important; "
+      "} "
+
+    /* 6. Scrollbar */
+    + QString("::-webkit-scrollbar { width: 8px !important; } "
+              "::-webkit-scrollbar-thumb { background: %1 !important; } "
+              "::-webkit-scrollbar-track { background: %2 !important; }")
+    .arg(accent)
+    .arg(bg)
+
+    /* =========================== */
+    /* 7. PANDORA SVG BACKGROUND FIX (THIS WAS THE MISSING PIECE) */
+    /* =========================== */
+    + QString(".AppBg, .BlurredBackground, .BlurredBackground__svg { "
+              "background: %1 !important; "
+              "} "
+              ".BlurredBackground__svg rect { "
+              "fill: %1 !important; "
+              "opacity: 1 !important; "
+              "} "
+              ".BlurredBackground__svg stop { "
+              "stop-color: %2 !important; "
+              "} ")
+    .arg(bg)
+    .arg(panel)
+
+    
+    /* =========================== */
+    /* 8. SEARCH INPUT FIX */
+    /* =========================== */
+    + QString(".GlobalSearchInput__input { "
+              "background-color: #2b2b2b !important; "
+              "color: %1 !important; "
+              "border: 1px solid #444444 !important; "
+              "box-shadow: none !important; "
+              "outline: none !important; "
+              "-webkit-appearance: none !important; "
+              "appearance: none !important; "
+              "} "
+
+              ".GlobalSearchInput__input::placeholder { "
+              "color: #888888 !important; "
+              "} "
+
+              ".GlobalSearchInput__input:focus { "
+              "background-color: #333333 !important; "
+              "border: 1px solid #666666 !important; "
+              "} "
+
+              ".GlobalSearchInput__input::-webkit-search-decoration,"
+              ".GlobalSearchInput__input::-webkit-search-cancel-button,"
+              ".GlobalSearchInput__input::-webkit-search-results-button,"
+              ".GlobalSearchInput__input::-webkit-search-results-decoration { "
+              "display: none !important; "
+              "} ")
+    .arg(text)
+
+    + QString(
+/* =========================== */
+/* 9. PANDORA MEDIA ICON FIX   */
+/* =========================== */
+
+/* FORCE ICON BASE COLOR (THIS IS THE KEY) */
+".Icon, .TunerControl__Icon, [class*='Icon'] { "
+"  color: %1 !important; "
+"  fill: %1 !important; "
+"  stroke: %1 !important; "
+"} "
+
+/* DIRECT SVG PATH CONTROL (CRITICAL) */
+".Icon path, .TunerControl__Icon path { "
+"  fill: currentColor !important; "
+"  stroke: none !important; "
+"} "
+
+/* BUTTON WRAPPER FIX (prevents white override in light mode) */
+".PlayButton, .ThumbUpButton, .ThumbDownButton, "
+".SkipButton, .ReplayButton, .RepeatButton, .ShuffleButton { "
+"  color: %1 !important; "
+"} "
+
+/* ACTIVE STATE FIX (Pandora toggles aria-checked) */
+"[aria-checked='true'] .Icon, "
+"[aria-checked='true'] svg { "
+"  color: %1 !important; "
+"  fill: %1 !important; "
+"} "
+)
+.arg(text)
+.arg(accent)
+
+    + QString(
+        /* =========================== */
+        /* 10. UNIFIED QT PRIMARY BACKGROUND OVERRIDE */
+        /* =========================== */
+
+        /* EVERYTHING defaults to Qt "Window" (PRIMARY system background) */
+        "* { "
+        "  background-color: %1 !important; "
+        "  background-image: none !important; "
+        "} "
+    ).arg(bg);
+
+QString jsCode = QString(
+    "(function() {"
+    "  var style = document.createElement('style');"
+    "  style.type = 'text/css';"
+    "  style.appendChild(document.createTextNode(`%1`));"
+    "  document.head.appendChild(style);"
+
+    "  var observer = new MutationObserver(function() {"
+    "    if (!document.head.contains(style)) {"
+    "      document.head.appendChild(style);"
+    "    }"
+    "  });"
+
+    "  observer.observe(document.documentElement, {childList: true, subtree: true});"
+    "})();"
+).arg(customCss);
+
+QWebEngineScript script;
+script.setName("PlumCanvasTheme");
+script.setSourceCode(jsCode);
+script.setInjectionPoint(QWebEngineScript::DocumentReady);
+script.setRunsOnSubFrames(true);
+
+profile->scripts()->insert(script);
 
     QWebEnginePage *page = new QWebEnginePage(profile, &window);
     QWebEngineView *browser = new QWebEngineView(&window);
@@ -1225,3 +1340,44 @@ Q_UNUSED(mpris);
     return app.exec();
 }
 #include "main.moc"
+EOF
+
+set -e
+
+ICON_URL="https://raw.githubusercontent.com/Logawinner/Lindora/main/Lindora.svg"
+
+TMP_DIR=$(mktemp -d)
+SVG_PATH="$TMP_DIR/lindora.svg"
+
+# 1. Download from GitHub
+wget -O "$SVG_PATH" "$ICON_URL"
+
+# 2. Install SVG into system icon theme
+sudo install -Dm644 "$SVG_PATH" /usr/share/icons/hicolor/scalable/apps/lindora.svg
+
+# 3. Generate PNG fallback
+sudo mkdir -p /usr/share/icons/hicolor/128x128/apps
+
+sudo rsvg-convert -w 128 -h 128 \
+  /usr/share/icons/hicolor/scalable/apps/lindora.svg \
+  -o /usr/share/icons/hicolor/128x128/apps/lindora.png
+
+  cat << 'EOF' > CMakeLists.txt
+cmake_minimum_required(VERSION 3.20)
+project(lindora-native LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_AUTOMOC ON)
+
+find_package(Qt6 REQUIRED COMPONENTS Widgets WebEngineWidgets Svg DBus)
+
+add_executable(lindora-native main.cpp)
+
+target_link_libraries(lindora-native PRIVATE
+    Qt6::Widgets
+    Qt6::WebEngineWidgets
+    Qt6::Svg
+    Qt6::DBus
+)
